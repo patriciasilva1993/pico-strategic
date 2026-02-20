@@ -350,10 +350,29 @@ function launchApp() {
 
 // ── API calls via fetch to GAS ────────────────────────────────────────────────
 function gasCall(params) {
-  var url = GAS_URL + '?' + Object.keys(params).map(function(k) {
-    return encodeURIComponent(k) + '=' + encodeURIComponent(typeof params[k] === 'object' ? JSON.stringify(params[k]) : params[k]);
-  }).join('&');
-  return fetch(url).then(function(r) { return r.json(); });
+  return new Promise(function(resolve, reject) {
+    var cbName = '_cb' + Date.now() + Math.floor(Math.random()*10000);
+    params.callback = cbName;
+    var url = GAS_URL + '?' + Object.keys(params).map(function(k) {
+      var v = params[k];
+      return encodeURIComponent(k) + '=' + encodeURIComponent(typeof v === 'object' ? JSON.stringify(v) : v);
+    }).join('&');
+    var script = document.createElement('script');
+    var timer = setTimeout(function() {
+      cleanup(); reject(new Error('Request timed out'));
+    }, 30000);
+    window[cbName] = function(data) {
+      cleanup(); resolve(data);
+    };
+    function cleanup() {
+      clearTimeout(timer);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+    script.onerror = function() { cleanup(); reject(new Error('Failed to reach Apps Script')); };
+    script.src = url;
+    document.head.appendChild(script);
+  });
 }
 
 function loadData() {
